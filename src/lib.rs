@@ -62,8 +62,11 @@ pub enum Error {
     #[error("error parsing exit status: {0}")]
     ParseExitStatusError(std::num::ParseIntError),
     /// error sending data through the channel from the task watching the fifo for tmux messages to the future waiting for the command result
-    #[error("error sending through channel: {0}")]
+    #[error("error sending through command result channel: {0}")]
     ChannelSendError(Box<postage::sink::SendError<CommandReturn>>),
+    /// error sending data through the channel from the close function to the task watching the fifo
+    #[error("error sending through quit channel: {0}")]
+    QuitChannelSendError(Box<postage::sink::SendError<()>>),
     /// channel was closed when we were polling it before we got a value
     #[error("channel was closed")]
     ChannelClosed,
@@ -101,6 +104,11 @@ pub enum Error {
 
 /// run a command in an existing [openssh::Session] and return exit status,
 /// stdout and stderr
+///
+/// # Errors
+///
+/// this fails if running the command fails for some SSH related reason but
+/// not if it returns an exit code that is not success
 pub async fn run_openssh_command<'a, S1, I, S2>(
     session: &openssh::Session,
     program: S1,
@@ -338,6 +346,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// return all the tmux sessions on the remote tmux server
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn list_sessions(&self) -> Result<Vec<TmuxSession>, Error> {
         let (status, stdout, stderr) = self
             .run_tmux_command("list-sessions", &["-F", "#S"])
@@ -361,6 +374,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// return all tmux windows in the given session
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     #[allow(dead_code)]
     pub async fn list_windows(&self, session: &TmuxSession) -> Result<Vec<TmuxWindow>, Error> {
         let (status, stdout, stderr) = self
@@ -393,6 +411,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// return all tmux panes in the given window
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     #[allow(dead_code)]
     pub async fn list_panes(&self, window: &TmuxWindow) -> Result<Vec<TmuxPane>, Error> {
         let (status, stdout, stderr) = self
@@ -424,6 +447,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// create a new tmux session in the background
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn new_session(&self, session_name: &TmuxSessionName) -> Result<TmuxSession, Error> {
         let (status, stdout, stderr) = self
             .run_tmux_command(
@@ -446,6 +474,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// create a new tmux window and return an identifier for it
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn new_window(&self, session: &TmuxSession) -> Result<TmuxWindow, Error> {
         let (status, stdout, stderr) = self
             .run_tmux_command(
@@ -470,6 +503,7 @@ impl<'a> Tmux<'a> {
     }
 
     /// returns the scope arguments needed for set-option to set options in the scope described by the parameter
+    #[must_use]
     pub fn option_scope_arguments(option_scope: TmuxOptionScope) -> Vec<String> {
         match option_scope {
             TmuxOptionScope::Server => vec!["-s".to_string()],
@@ -486,6 +520,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// set tmux option
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn set_option(
         &self,
         option_scope: TmuxOptionScope,
@@ -519,6 +558,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// set tmux hook
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn set_hook(
         &self,
         option_scope: TmuxOptionScope,
@@ -548,6 +592,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// pipe tmux pane
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn pipe_pane_output_to(
         &self,
         pane: &TmuxPane,
@@ -572,6 +621,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// respawn tmux pane
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn respawn_pane(&self, pane: &TmuxPane, command: &str) -> Result<(), Error> {
         let (status, stdout, stderr) = self
             .run_tmux_command(
@@ -592,6 +646,11 @@ impl<'a> Tmux<'a> {
     }
 
     /// kill tmux pan
+    ///
+    /// # Errors
+    ///
+    /// this fails if either something goes wrong on the SSH transport
+    /// or tmux returns an error exit code
     pub async fn kill_pane(&self, pane: &TmuxPane) -> Result<(), Error> {
         let (status, stdout, stderr) = self
             .run_tmux_command("kill-pane", &["-t", &format!("={}", pane)])
@@ -658,16 +717,25 @@ pub struct TmuxCommandRunner {
     command_to_channel: std::sync::Arc<
         tokio::sync::Mutex<BTreeMap<uuid::Uuid, postage::oneshot::Sender<CommandReturn>>>,
     >,
+    /// the join handle for the background task which listens to the fifo on the server side
+    /// that tmux hooks write into for completed commands (on the pane_died hook)
+    join_handle: tokio::task::JoinHandle<Result<(), Error>>,
+    /// the channel to signal the background task to stop listening on the fifo
+    quit_channel_sender: postage::oneshot::Sender<()>,
 }
 
 impl TmuxCommandRunner {
     /// create a new command runner and set up necessary tmux session and options on the server side
+    ///
+    /// # Errors
+    ///
+    /// this fails if we can not connect to the server and create the tmux session with the required hooks and options
     pub async fn new(
         ssh_destination: String,
         tmux_tmp_dir: String,
         tmux_socket_filename: String,
         tmux_session_name: TmuxSessionName,
-    ) -> Result<(Self, tokio::task::JoinHandle<Result<(), Error>>), Error> {
+    ) -> Result<Self, Error> {
         let tmux_socket = TmuxSocket(format!("{}/tmux-0/{}", tmux_tmp_dir, tmux_socket_filename));
         let fifo_name = format!("{}/{}.fifo", tmux_tmp_dir, tmux_socket_filename);
 
@@ -768,6 +836,7 @@ impl TmuxCommandRunner {
         let command_to_channel: std::sync::Arc<
             tokio::sync::Mutex<BTreeMap<uuid::Uuid, postage::oneshot::Sender<CommandReturn>>>,
         > = std::sync::Arc::new(tokio::sync::Mutex::new(BTreeMap::new()));
+        let (quit_channel_sender, mut quit_channel_receiver) = postage::oneshot::channel();
         let command_to_channel_task = std::sync::Arc::clone(&command_to_channel);
         let tmux_tmp_dir_task = tmux_tmp_dir.to_owned();
         let tmux_socket_task = tmux_socket.to_owned();
@@ -792,7 +861,18 @@ impl TmuxCommandRunner {
                 let buf_reader = BufReader::new(stdout);
                 let mut line_reader = LinesStream::new(buf_reader.lines());
                 tracing::debug!("Started listening on FIFO");
-                while let Some(l) = line_reader.next().await {
+                while let Some(l) = tokio::select! {
+                    l = line_reader.next() => {
+                        if l.is_none() {
+                            tracing::debug!("Shut down command runner background task because fifo reader returned None");
+                        }
+                        l
+                    }
+                    _ = quit_channel_receiver.recv() => {
+                        tracing::debug!("Explicitly shut down command runner background task via quit channel");
+                        None
+                    }
+                } {
                     match l {
                         Ok(l) => {
                             tracing::debug!("Read line from fifo:\n{}", l);
@@ -921,20 +1001,23 @@ impl TmuxCommandRunner {
             result
         });
 
-        Ok((
-            TmuxCommandRunner {
-                ssh_destination,
-                tmux_tmp_dir,
-                tmux_socket,
-                tmux_socket_filename,
-                tmux_session,
-                command_to_channel,
-            },
-            remote_child_join_handle,
-        ))
+        Ok(TmuxCommandRunner {
+            ssh_destination,
+            tmux_tmp_dir,
+            tmux_socket,
+            tmux_socket_filename,
+            tmux_session,
+            command_to_channel,
+            join_handle: remote_child_join_handle,
+            quit_channel_sender,
+        })
     }
 
     /// run a new command in the tmux session
+    ///
+    /// # Errors
+    ///
+    /// this fails on SSH errors or tmux exit status that is not success
     pub async fn run_command(&mut self, command: &str) -> Result<CommandResult, Error> {
         let (sender, receiver) = postage::oneshot::channel();
         let command_id = uuid::Uuid::new_v4();
@@ -972,6 +1055,26 @@ impl TmuxCommandRunner {
             channel_receiver: receiver,
         })
     }
+
+    /// this must be awaited at the end, when the command runner is no
+    /// longer needed. If any commands are still in progress they will
+    /// not be cleaned up on the server. Await all the futures for commands
+    /// started on this runner before awaiting this to avoid that issue.
+    ///
+    /// # Errors
+    ///
+    /// this fails if we either could not send the quit signal to the background task
+    /// or if the background task itself exits with an error
+    pub async fn close(mut self) -> Result<(), Error> {
+        tracing::debug!("Closing down async command runner");
+        self.quit_channel_sender
+            .send(())
+            .await
+            .map_err(|e| crate::Error::QuitChannelSendError(Box::new(e)))?;
+        let res = self.join_handle.await?;
+        res?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -992,7 +1095,7 @@ mod test {
 
         let tmux_session_name = TmuxSessionName(std::env::var("TEST_TMUX_SESSION_NAME")?);
 
-        let (mut tmux_command_runner, join_handle) = TmuxCommandRunner::new(
+        let mut tmux_command_runner = TmuxCommandRunner::new(
             format!("{}@{}", ssh_user, ssh_host),
             tmux_tmp_dir,
             tmux_socket_filename,
@@ -1022,9 +1125,7 @@ mod test {
             status2, output2
         );
 
-        // result handling join at end of program execution
-        let res = join_handle.await?;
-        res?;
+        tmux_command_runner.close().await?;
 
         Ok(())
     }
