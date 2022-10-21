@@ -1085,7 +1085,7 @@ mod test {
     #[traced_test]
     #[tokio::test]
     async fn test() -> Result<(), Box<dyn std::error::Error>> {
-        dotenv::dotenv()?;
+        dotenvy::dotenv()?;
         let ssh_user = std::env::var("TEST_SSH_USER")?;
         let ssh_host = std::env::var("TEST_SSH_HOST")?;
 

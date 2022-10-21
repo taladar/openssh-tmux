@@ -3,7 +3,7 @@ name = "openssh-tmux"
 description = "Library to programmatically run commands in a remote tmux session over openssh to avoid aborted commands when the ssh session is interrupted"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Matthias Hörmann <mhoermann@gmail.com>"]
 edition = "2021"
 repository = "https://github.com/taladar/openssh-tmux"
@@ -59,5 +59,5 @@ version = "0.9.4"
 [dev-dependencies.tracing-test]
 version = "0.2.1"
 
-[dev-dependencies.dotenv]
-version = "0.15.0"
+[dev-dependencies.dotenvy]
+version = "0.15.6"
