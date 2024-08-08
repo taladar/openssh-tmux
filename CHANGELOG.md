@@ -1,3 +1,8 @@
+## 0.2.1
+
+update dependencies
+new deny.toml format
+
 ## 0.2.0
 
 upgrade dependencies including some incompatible ones
