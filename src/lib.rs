@@ -248,11 +248,9 @@ impl std::str::FromStr for TmuxWindow {
                     window_name,
                 })
             }
-            _ => {
-                return Err(crate::Error::UnexpectedSplitResultWhenParsingTmuxWindow(
-                    split.iter().map(|s| s.to_string()).collect(),
-                ));
-            }
+            _ => Err(crate::Error::UnexpectedSplitResultWhenParsingTmuxWindow(
+                split.iter().map(|s| s.to_string()).collect(),
+            )),
         }
     }
 }
@@ -283,11 +281,9 @@ impl std::str::FromStr for TmuxPane {
                 let pane_id: TmuxPaneId = p.parse()?;
                 Ok(TmuxPane { window, pane_id })
             }
-            _ => {
-                return Err(crate::Error::UnexpectedSplitResultWhenParsingTmuxPane(
-                    split.iter().map(|s| s.to_string()).collect(),
-                ));
-            }
+            _ => Err(crate::Error::UnexpectedSplitResultWhenParsingTmuxPane(
+                split.iter().map(|s| s.to_string()).collect(),
+            )),
         }
     }
 }
