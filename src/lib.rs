@@ -33,16 +33,16 @@
 
 use std::{
     collections::BTreeMap,
-    os::unix::prelude::ExitStatusExt,
+    os::unix::prelude::ExitStatusExt as _,
     process::ExitStatus,
     str::{from_utf8, Utf8Error},
 };
 
-use postage::prelude::{Sink, Stream};
-use tokio::io::AsyncBufReadExt;
+use postage::prelude::{Sink as _, Stream as _};
+use tokio::io::AsyncBufReadExt as _;
 use tokio::io::BufReader;
 use tokio_stream::wrappers::LinesStream;
-use tokio_stream::StreamExt;
+use tokio_stream::StreamExt as _;
 
 /// the error type for the library
 #[derive(thiserror::Error, Debug)]
@@ -145,7 +145,7 @@ impl std::str::FromStr for TmuxSessionName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            Ok(TmuxSessionName(s.to_string()))
+            Ok(Self(s.to_string()))
         } else {
             Err(crate::Error::UnexpectedCharacterInTmuxSessionName(
                 s.to_string(),
@@ -163,7 +163,7 @@ impl std::str::FromStr for TmuxWindowName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            Ok(TmuxWindowName(s.to_string()))
+            Ok(Self(s.to_string()))
         } else {
             Err(crate::Error::UnexpectedCharacterInTmuxWindowName(
                 s.to_string(),
@@ -181,7 +181,7 @@ impl std::str::FromStr for TmuxPaneId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse::<u64>() {
-            Ok(pane_id) => Ok(TmuxPaneId(pane_id)),
+            Ok(pane_id) => Ok(Self(pane_id)),
             Err(e) => Err(crate::Error::ParsePaneId(e)),
         }
     }
@@ -205,7 +205,7 @@ impl std::str::FromStr for TmuxSession {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let session_name: TmuxSessionName = s.parse()?;
-        Ok(TmuxSession { session_name })
+        Ok(Self { session_name })
     }
 }
 
@@ -243,7 +243,7 @@ impl std::str::FromStr for TmuxWindow {
             [s, w] => {
                 let session: TmuxSession = s.parse()?;
                 let window_name: TmuxWindowName = w.parse()?;
-                Ok(TmuxWindow {
+                Ok(Self {
                     session,
                     window_name,
                 })
@@ -279,7 +279,7 @@ impl std::str::FromStr for TmuxPane {
             [w, p] => {
                 let window: TmuxWindow = w.parse()?;
                 let pane_id: TmuxPaneId = p.parse()?;
-                Ok(TmuxPane { window, pane_id })
+                Ok(Self { window, pane_id })
             }
             _ => Err(crate::Error::UnexpectedSplitResultWhenParsingTmuxPane(
                 split.iter().map(|s| s.to_string()).collect(),
@@ -317,7 +317,7 @@ pub enum TmuxOptionScope {
 impl<'a> Tmux<'a> {
     /// create a new Tmux object
     #[must_use]
-    pub fn new(tmux_socket: TmuxSocket, openssh_session: &'a openssh::Session) -> Self {
+    pub const fn new(tmux_socket: TmuxSocket, openssh_session: &'a openssh::Session) -> Self {
         Tmux {
             tmux_socket,
             openssh_session,
@@ -376,12 +376,11 @@ impl<'a> Tmux<'a> {
     ///
     /// this fails if either something goes wrong on the SSH transport
     /// or tmux returns an error exit code
-    #[allow(dead_code)]
     pub async fn list_windows(&self, session: &TmuxSession) -> Result<Vec<TmuxWindow>, Error> {
         let (status, stdout, stderr) = self
             .run_tmux_command(
                 "list-windows",
-                &["-t", &format!("={}", session), "-F", "#{window_id}"],
+                &["-t", &format!("={session}"), "-F", "#{window_id}"],
             )
             .await?;
         if !status.success() {
@@ -413,10 +412,9 @@ impl<'a> Tmux<'a> {
     ///
     /// this fails if either something goes wrong on the SSH transport
     /// or tmux returns an error exit code
-    #[allow(dead_code)]
     pub async fn list_panes(&self, window: &TmuxWindow) -> Result<Vec<TmuxPane>, Error> {
         let (status, stdout, stderr) = self
-            .run_tmux_command("list-panes", &["-t", &format!("={}", window), "-F", "#D"])
+            .run_tmux_command("list-panes", &["-t", &format!("={window}"), "-F", "#D"])
             .await?;
         if !status.success() {
             return Err(Error::TmuxCommandFailed(
@@ -480,7 +478,7 @@ impl<'a> Tmux<'a> {
         let (status, stdout, stderr) = self
             .run_tmux_command(
                 "new-window",
-                &["-t", &format!("={}", session), "-P", "-F", "#{window_id}"],
+                &["-t", &format!("={session}"), "-P", "-F", "#{window_id}"],
             )
             .await?;
         if !status.success() {
@@ -602,7 +600,7 @@ impl<'a> Tmux<'a> {
         let (status, stdout, stderr) = self
             .run_tmux_command(
                 "pipe-pane",
-                &["-O", "-t", &format!("={}", pane), pipe_command],
+                &["-O", "-t", &format!("={pane}"), pipe_command],
             )
             .await?;
         if !status.success() {
@@ -625,10 +623,7 @@ impl<'a> Tmux<'a> {
     /// or tmux returns an error exit code
     pub async fn respawn_pane(&self, pane: &TmuxPane, command: &str) -> Result<(), Error> {
         let (status, stdout, stderr) = self
-            .run_tmux_command(
-                "respawn-pane",
-                &["-k", "-t", &format!("={}", pane), command],
-            )
+            .run_tmux_command("respawn-pane", &["-k", "-t", &format!("={pane}"), command])
             .await?;
         if !status.success() {
             return Err(Error::TmuxCommandFailed(
@@ -650,7 +645,7 @@ impl<'a> Tmux<'a> {
     /// or tmux returns an error exit code
     pub async fn kill_pane(&self, pane: &TmuxPane) -> Result<(), Error> {
         let (status, stdout, stderr) = self
-            .run_tmux_command("kill-pane", &["-t", &format!("={}", pane)])
+            .run_tmux_command("kill-pane", &["-t", &format!("={pane}")])
             .await?;
         if !status.success() {
             return Err(Error::TmuxCommandFailed(
@@ -733,8 +728,8 @@ impl TmuxCommandRunner {
         tmux_socket_filename: String,
         tmux_session_name: TmuxSessionName,
     ) -> Result<Self, Error> {
-        let tmux_socket = TmuxSocket(format!("{}/tmux-0/{}", tmux_tmp_dir, tmux_socket_filename));
-        let fifo_name = format!("{}/{}.fifo", tmux_tmp_dir, tmux_socket_filename);
+        let tmux_socket = TmuxSocket(format!("{tmux_tmp_dir}/tmux-0/{tmux_socket_filename}"));
+        let fifo_name = format!("{tmux_tmp_dir}/{tmux_socket_filename}.fifo");
 
         // initialize tmux for our purposes
         let session =
@@ -751,8 +746,7 @@ impl TmuxCommandRunner {
             }
             Err(Error::TmuxCommandFailed(_, _, _, stderr))
                 if stderr.starts_with(&format!(
-                    "error connecting to {} (No such file or directory)",
-                    tmux_socket
+                    "error connecting to {tmux_socket} (No such file or directory)",
                 )) =>
             {
                 vec![]
@@ -786,8 +780,7 @@ impl TmuxCommandRunner {
             TmuxOptionScope::GlobalSession,
             "alert-activity",
             &format!(
-                r##"run-shell -b "echo 1 > {}/{}_#S:#I.#P.active""##,
-                tmux_tmp_dir, tmux_socket_filename,
+                r#"run-shell -b "echo 1 > {tmux_tmp_dir}/{tmux_socket_filename}_#S:#I.#P.active""#,
             ),
         )
         .await?;
@@ -796,8 +789,7 @@ impl TmuxCommandRunner {
             TmuxOptionScope::GlobalSession,
             "alert-silence",
             &format!(
-                r##"run-shell -b "echo 0 > {}/{}_#S:#I.#P.active""##,
-                tmux_tmp_dir, tmux_socket_filename,
+                r#"run-shell -b "echo 0 > {tmux_tmp_dir}/{tmux_socket_filename}_#S:#I.#P.active""#,
             ),
         )
         .await?;
@@ -805,10 +797,7 @@ impl TmuxCommandRunner {
         tmux.set_hook(
             TmuxOptionScope::GlobalSession,
             "after-kill-pane",
-            &format!(
-                r##"run-shell -b "rm {}/{}_#S:#I.#P.active""##,
-                tmux_tmp_dir, tmux_socket_filename,
-            ),
+            &format!(r#"run-shell -b "rm {tmux_tmp_dir}/{tmux_socket_filename}_#S:#I.#P.active""#,),
         )
         .await?;
 
@@ -822,8 +811,7 @@ impl TmuxCommandRunner {
             TmuxOptionScope::GlobalSession,
             "pane-died",
             &format!(
-                r##"run-shell -b "echo 'pane-died|#S:#I.#P|#{{pane_dead_signal}}|#{{pane_dead_status}}|#{{pane_dead_time}}|#{{@pane_command_id}}|#{{pane_start_command}}' > {}""##,
-                fifo_name,
+                r#"run-shell -b "echo 'pane-died|#S:#I.#P|#{{pane_dead_signal}}|#{{pane_dead_status}}|#{{pane_dead_time}}|#{{@pane_command_id}}|#{{pane_start_command}}' > {fifo_name}""#,
             ),
         ).await?;
 
@@ -873,7 +861,7 @@ impl TmuxCommandRunner {
                     match l {
                         Ok(l) => {
                             tracing::debug!("Read line from fifo:\n{}", l);
-                            match &l.split('|').collect::<Vec<&str>>()[..] {
+                            match &*l.split('|').collect::<Vec<&str>>() {
                                 ["pane-died", pane, _signal, status, _time, command_id, start_command @ ..] =>
                                 {
                                     let start_command = start_command.join("|");
@@ -899,25 +887,23 @@ impl TmuxCommandRunner {
                                     )
                                     .await?;
 
-                                    {
-                                        let mut command_to_channel =
-                                            command_to_channel.lock().await;
+                                    let mut command_to_channel = command_to_channel.lock().await;
 
-                                        match (*command_to_channel).remove(&command_id) {
-                                            Some(mut sender) => {
-                                                sender.send(Ok((status, output))).await.map_err(
-                                                    |e| Error::ChannelSendError(Box::new(e)),
-                                                )?;
-                                            }
-                                            None => {
-                                                tracing::error!("Got command results from pipe but there was no channel to send it to: {} {}", command_id, start_command);
-                                                tracing::error!(
-                                                    "Channels in command_to_channel map:\n{:#?}",
-                                                    (*command_to_channel).keys()
-                                                );
-                                            }
+                                    match (*command_to_channel).remove(&command_id) {
+                                        Some(mut sender) => {
+                                            sender.send(Ok((status, output))).await.map_err(
+                                                |e| Error::ChannelSendError(Box::new(e)),
+                                            )?;
+                                        }
+                                        None => {
+                                            tracing::error!("Got command results from pipe but there was no channel to send it to: {} {}", command_id, start_command);
+                                            tracing::error!(
+                                                "Channels in command_to_channel map:\n{:#?}",
+                                                (*command_to_channel).keys()
+                                            );
                                         }
                                     }
+                                    drop(command_to_channel);
                                     run_openssh_command(
                                         &session,
                                         "rm",
@@ -998,7 +984,7 @@ impl TmuxCommandRunner {
             result
         });
 
-        Ok(TmuxCommandRunner {
+        Ok(Self {
             ssh_destination,
             tmux_tmp_dir,
             tmux_socket,
@@ -1093,7 +1079,7 @@ mod test {
         let tmux_session_name = TmuxSessionName(std::env::var("TEST_TMUX_SESSION_NAME")?);
 
         let mut tmux_command_runner = TmuxCommandRunner::new(
-            format!("{}@{}", ssh_user, ssh_host),
+            format!("{ssh_user}@{ssh_host}"),
             tmux_tmp_dir,
             tmux_socket_filename,
             tmux_session_name,
@@ -1110,17 +1096,23 @@ mod test {
 
         let (status1, output1) = command_result1.await?;
 
-        println!(
-            "Command 1 exited with status {} and output:\n{}",
-            status1, output1
-        );
+        #[expect(
+            clippy::print_stdout,
+            reason = "this is just a test and the main library does not use tracing"
+        )]
+        {
+            println!("Command 1 exited with status {status1} and output:\n{output1}",);
+        }
 
         let (status2, output2) = command_result2.await?;
 
-        println!(
-            "Command 2 exited with status {} and output:\n{}",
-            status2, output2
-        );
+        #[expect(
+            clippy::print_stdout,
+            reason = "this is just a test and the main library does not use tracing"
+        )]
+        {
+            println!("Command 2 exited with status {status2} and output:\n{output2}",);
+        }
 
         tmux_command_runner.close().await?;
 
