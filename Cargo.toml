@@ -32,7 +32,7 @@ version = "1.1.10"
 version = "0.5.0"
 
 [dependencies.thiserror]
-version = "2.0.17"
+version = "2.0.18"
 
 [dependencies.tokio]
 version = "1.49.0"
@@ -50,14 +50,14 @@ features = ["io"]
 version = "0.1.44"
 
 [dependencies.uuid]
-version = "1.19.0"
+version = "1.20.0"
 features = ["v4"]
 
 [dev-dependencies.dotenvy]
 version = "0.15.7"
 
 [dev-dependencies.tracing-test]
-version = "0.2.5"
+version = "0.2.6"
 
 [profile.release]
 # do not strip debug info from release builds, useful for debugging those, cargo-flamegraph profiling or similar use cases
