@@ -15,11 +15,11 @@ version="$(cargo get package.version)"
 
 git cliff --prepend CHANGELOG.md -u -t "openssh_tmux_${version}"
 
-rumdl fmt --fix CHANGELOG.md
+rumdl fmt CHANGELOG.md
 
 cargo build
 
-git add CHANGELOG.md Cargo.toml
+git add CHANGELOG.md Cargo.toml Cargo.lock
 
 git commit -m "chore(release): Release version ${version}"
 
