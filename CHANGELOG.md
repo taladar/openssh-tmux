@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.10 - 2026-06-08 12:36:42Z
+
+### ⚙️ Miscellaneous Tasks
+
+- Sync project to latest cargo-generate template and ggh checks
+- *(template)* Reconcile lib crate with latest cargo-generate template
+- *(dependencies)* Update dependencies
+
 ## 0.2.9 - 2026-04-07 14:25:27Z
 
 ### ⚙️ Miscellaneous Tasks
