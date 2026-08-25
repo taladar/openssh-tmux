@@ -850,8 +850,7 @@ impl TmuxCommandRunner {
                                         &session,
                                         "cat",
                                         &[format!(
-                                            "{}/{}_{}.log",
-                                            &tmux_tmp_dir, tmux_socket_filename, pane
+                                            "{tmux_tmp_dir}/{tmux_socket_filename}_{pane}.log",
                                         )],
                                     )
                                     .await?;
@@ -877,8 +876,7 @@ impl TmuxCommandRunner {
                                         &session,
                                         "rm",
                                         &[format!(
-                                            "{}/{}_{}.log",
-                                            &tmux_tmp_dir, tmux_socket_filename, pane
+                                            "{tmux_tmp_dir}/{tmux_socket_filename}_{pane}.log",
                                         )],
                                     )
                                     .await?;
@@ -886,8 +884,7 @@ impl TmuxCommandRunner {
                                         &session,
                                         "rm",
                                         &[format!(
-                                            "{}/{}_{}.active",
-                                            &tmux_tmp_dir, tmux_socket_filename, pane
+                                            "{tmux_tmp_dir}/{tmux_socket_filename}_{pane}.active",
                                         )],
                                     )
                                     .await?;

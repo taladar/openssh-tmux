@@ -19,7 +19,7 @@ version = "2.1.1"
 features = ["display", "from_str"]
 
 [dependencies.futures]
-version = "0.3.32"
+version = "0.3.34"
 
 [dependencies.openssh]
 version = "0.11.6"
@@ -31,25 +31,21 @@ version = "1.1.13"
 version = "0.5.0"
 
 [dependencies.thiserror]
-version = "2.0.18"
+version = "2.0.20"
 
 [dependencies.tokio]
-version = "1.52.3"
+version = "1.53.1"
 features = ["full"]
 
 [dependencies.tokio-stream]
-version = "0.1.18"
+version = "0.1.19"
 features = ["io-util"]
-
-[dependencies.tokio-util]
-version = "0.7.18"
-features = ["io"]
 
 [dependencies.tracing]
 version = "0.1.44"
 
 [dependencies.uuid]
-version = "1.23.2"
+version = "1.25.0"
 features = ["v4"]
 
 [dev-dependencies.dotenvy]
