@@ -31,10 +31,10 @@ version = "1.1.13"
 version = "0.5.0"
 
 [dependencies.thiserror]
-version = "2.0.20"
+version = "2.0.21"
 
 [dependencies.tokio]
-version = "1.53.1"
+version = "1.54.1"
 features = ["full"]
 
 [dependencies.tokio-stream]
@@ -45,7 +45,7 @@ features = ["io-util"]
 version = "0.1.44"
 
 [dependencies.uuid]
-version = "1.25.0"
+version = "1.29.2"
 features = ["v4"]
 
 [dev-dependencies.dotenvy]
